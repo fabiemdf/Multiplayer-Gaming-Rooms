@@ -11,11 +11,31 @@ const path       = require('path');
 const helmet     = require('helmet');
 const rateLimit  = require('express-rate-limit');
 const bcrypt     = require('bcryptjs');
+const morgan     = require('morgan');
+const winston    = require('winston');
+
+// ─── Logger ───────────────────────────────────────────────────────────────────
+const isProd = process.env.NODE_ENV === 'production';
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || (isProd ? 'info' : 'debug'),
+  format: isProd
+    ? winston.format.combine(winston.format.timestamp(), winston.format.json())
+    : winston.format.combine(
+        winston.format.colorize(),
+        winston.format.timestamp({ format: 'HH:mm:ss' }),
+        winston.format.printf(({ level, message, timestamp, ...meta }) => {
+          const extra = Object.keys(meta).length ? ' ' + JSON.stringify(meta) : '';
+          return `${timestamp} ${level}: ${message}${extra}`;
+        })
+      ),
+  transports: [new winston.transports.Console()],
+});
 
 // ─── Game Registry (auto-loads every file in ./games/) ────────────────────────
-console.log('Loading games…');
+logger.info('Loading games…');
 const GameRegistry = require('./games');
-console.log(`${Object.keys(GameRegistry).length} game(s) registered.\n`);
+logger.info(`${Object.keys(GameRegistry).length} game(s) registered.`);
 
 const LEVELS = ['beginner', 'intermediate', 'advanced'];
 
@@ -23,8 +43,6 @@ const LEVELS = ['beginner', 'intermediate', 'advanced'];
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
   : ['http://localhost:3000'];
-
-const isProd = process.env.NODE_ENV === 'production';
 
 // ─── Express + Security Middleware ────────────────────────────────────────────
 const app        = express();
@@ -46,13 +64,18 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,  // needed for WebRTC
 }));
 
-// HTTP rate limiter (REST endpoints / static assets)
+// HTTP rate limiter
 app.use(rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10),
   max:      parseInt(process.env.RATE_LIMIT_MAX       || '200',   10),
   standardHeaders: true,
   legacyHeaders:   false,
   message: { error: 'Too many requests, please try again later.' },
+}));
+
+// HTTP request logging via morgan → piped into winston
+app.use(morgan(isProd ? 'combined' : 'dev', {
+  stream: { write: msg => logger.http(msg.trimEnd()) }
 }));
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -79,12 +102,8 @@ const io = new Server(httpServer, {
 });
 
 // ─── Socket rate limiter ───────────────────────────────────────────────────────
-// Tracks event counts per socket; reset every WINDOW_MS
-const SOCKET_RATE = {
-  windowMs:  15_000,   // 15 s window
-  maxEvents: 60,       // max 60 events per window
-};
-const socketEventCounts = new Map();  // socketId -> { count, resetAt }
+const SOCKET_RATE = { windowMs: 15_000, maxEvents: 60 };
+const socketEventCounts = new Map();
 
 function socketAllowed(socketId) {
   const now = Date.now();
@@ -98,8 +117,8 @@ function socketAllowed(socketId) {
 }
 
 // ─── Data Stores ──────────────────────────────────────────────────────────────
-const rooms = new Map();   // roomId -> Room
-const users = new Map();   // socketId -> User
+const rooms = new Map();
+const users = new Map();
 
 // ─── Room Class ───────────────────────────────────────────────────────────────
 class Room {
@@ -111,7 +130,7 @@ class Room {
     this.level        = level;
     this.maxPlayers   = def ? def.maxPlayers : 2;
     this.isPrivate    = isPrivate;
-    this.passwordHash = passwordHash;   // bcrypt hash, never plaintext
+    this.passwordHash = passwordHash;
     this.players      = [];
     this.spectators   = [];
     this.chatHistory  = [];
@@ -147,28 +166,27 @@ class Room {
 
 // ─── Socket.IO connection handler ─────────────────────────────────────────────
 io.on('connection', (socket) => {
+  logger.debug('Socket connected', { socketId: socket.id });
 
-  // Send available game types on first connect
   socket.emit('gameTypes', getGameTypesList());
 
-  // Helper: reject if over rate limit
   function guard(fn) {
     return (...args) => {
       if (!socketAllowed(socket.id)) {
+        logger.warn('Socket rate limit hit', { socketId: socket.id });
         socket.emit('error', 'Too many requests — slow down!');
         return;
       }
       try {
         const result = fn(...args);
-        // Handle async handlers transparently
         if (result && typeof result.catch === 'function') {
           result.catch(err => {
-            console.error(`[socket:${socket.id}] unhandled async error:`, err);
+            logger.error('Async socket handler error', { socketId: socket.id, err: err.message });
             socket.emit('error', 'An unexpected error occurred.');
           });
         }
       } catch (err) {
-        console.error(`[socket:${socket.id}] unhandled error:`, err);
+        logger.error('Socket handler error', { socketId: socket.id, err: err.message });
         socket.emit('error', 'An unexpected error occurred.');
       }
     };
@@ -179,6 +197,7 @@ io.on('connection', (socket) => {
       return socket.emit('error', 'Username required');
     const clean = String(username).trim().slice(0, 20);
     users.set(socket.id, { id: socket.id, username: clean, avatar: avatar || '🎮', roomId: null });
+    logger.debug('Username set', { socketId: socket.id, username: clean });
     socket.emit('usernameSet', { success: true });
   }));
 
@@ -204,6 +223,8 @@ io.on('connection', (socket) => {
     rooms.set(room.id, room);
     socket.join(room.id);
 
+    logger.info('Room created', { roomId: room.id, name: room.name, gameType, level, isPrivate: !!isPrivate, creator: user.username });
+
     socket.emit('roomJoined', {
       room: room.toPublic(), players: room.players, spectators: [],
       chatHistory: [], playerIndex: 0, isSpectator: false,
@@ -221,7 +242,10 @@ io.on('connection', (socket) => {
     if (!room) return socket.emit('error', 'Room not found');
 
     const ok = await room.checkPassword(password);
-    if (!ok) return socket.emit('error', 'Wrong password');
+    if (!ok) {
+      logger.warn('Wrong room password attempt', { roomId, socketId: socket.id });
+      return socket.emit('error', 'Wrong password');
+    }
 
     let playerIndex = -1, isSpectator = false;
     if (!room.gameStarted && room.players.length < room.maxPlayers) {
@@ -233,6 +257,8 @@ io.on('connection', (socket) => {
     }
     user.roomId = room.id;
     socket.join(room.id);
+
+    logger.info('Player joined room', { roomId, username: user.username, isSpectator });
 
     socket.emit('roomJoined', {
       room: room.toPublic(), players: room.players, spectators: room.spectators,
@@ -298,6 +324,7 @@ io.on('connection', (socket) => {
 
     io.to(room.id).emit('gameStateUpdate', result);
     if (result.gameOver) {
+      logger.info('Game over', { roomId: room.id, gameType: room.gameType, winner: result.winnerName ?? 'draw' });
       room.gameStarted = false;
       room.players.forEach(p => { p.isReady = false; });
       broadcastRooms();
@@ -327,9 +354,10 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('disconnect', () => {
-    try { handleLeave(socket); } catch (e) { console.error('[disconnect]', e); }
+    try { handleLeave(socket); } catch (e) { logger.error('Error during disconnect cleanup', { err: e.message }); }
     users.delete(socket.id);
     socketEventCounts.delete(socket.id);
+    logger.debug('Socket disconnected', { socketId: socket.id });
   });
 });
 
@@ -369,14 +397,20 @@ function handleLeave(socket) {
   socket.leave(room.id);
   user.roomId = null;
 
+  logger.info('Player left room', { roomId: room.id, username: user.username });
+
   if (room.gameStarted && room.players.length < 2) {
     room.gameStarted = false;
     room.gameState   = null;
     room.players.forEach(p => { p.isReady = false; });
     io.to(room.id).emit('gameAborted', { reason: 'A player disconnected' });
+    logger.info('Game aborted — player disconnected', { roomId: room.id });
   }
 
-  if (room.players.length === 0 && room.spectators.length === 0) rooms.delete(room.id);
+  if (room.players.length === 0 && room.spectators.length === 0) {
+    rooms.delete(room.id);
+    logger.debug('Empty room deleted', { roomId: room.id });
+  }
   broadcastRooms();
 }
 
@@ -385,18 +419,18 @@ function startGame(room) {
   if (!gameDef) return;
   room.gameState   = gameDef.init();
   room.gameStarted = true;
+  logger.info('Game started', { roomId: room.id, gameType: room.gameType, players: room.players.map(p => p.username) });
   io.to(room.id).emit('gameStarted', { gameType: room.gameType, gameState: room.gameState, players: room.players });
   broadcastRooms();
 }
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdown(signal) {
-  console.log(`\n${signal} received – shutting down gracefully`);
+  logger.info(`${signal} received — shutting down gracefully`);
   httpServer.close(() => {
-    console.log('HTTP server closed');
+    logger.info('HTTP server closed');
     process.exit(0);
   });
-  // Force-exit after 10 s if connections linger
   setTimeout(() => process.exit(1), 10_000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
@@ -405,7 +439,6 @@ process.on('SIGINT',  () => shutdown('SIGINT'));
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT || '3000', 10);
 httpServer.listen(PORT, () => {
-  const env = process.env.NODE_ENV || 'development';
-  console.log(`🎮 Gaming Rooms running at http://localhost:${PORT} [${env}]`);
-  if (!isProd) console.log('   Allowed origins:', ALLOWED_ORIGINS.join(', '));
+  logger.info(`Gaming Rooms running`, { port: PORT, env: process.env.NODE_ENV || 'development' });
+  if (!isProd) logger.debug('Allowed origins', { origins: ALLOWED_ORIGINS });
 });
