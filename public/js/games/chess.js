@@ -311,5 +311,7 @@ const ChessGame = (() => {
     `;
   }
 
+  GameRegistry.register({ id: 'chess', label: 'Chess', icon: '♟️', render, update });
+
   return { render, update };
 })();

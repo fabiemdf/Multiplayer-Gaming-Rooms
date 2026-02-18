@@ -489,6 +489,95 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent);
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   GAMES – REVERSI
+   ═══════════════════════════════════════════════════════════════ */
+.reversi-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+.reversi-score-bar {
+  display: flex; gap: 24px; padding: 10px 20px;
+  background: var(--surface2); border-radius: 10px; border: 1px solid var(--border);
+}
+.rv-score { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.you-tag  { font-size: 11px; color: var(--accent); margin-left: 4px; }
+
+.reversi-board {
+  display: grid; grid-template-columns: repeat(8, 1fr);
+  background: #1a5c2a; border: 3px solid #0d3318; border-radius: 4px;
+  gap: 1px; padding: 4px;
+}
+.reversi-cell {
+  width: 58px; height: 58px; background: #2a8a3e; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.15s; position: relative;
+}
+.reversi-cell.valid-move { background: #3db85a; }
+.reversi-cell.valid-move::after {
+  content: ''; width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(0,0,0,0.3); position: absolute;
+}
+.reversi-cell.valid-move:hover { background: #50d46e; }
+
+.reversi-disc {
+  width: 46px; height: 46px; border-radius: 50%;
+  box-shadow: 2px 2px 6px rgba(0,0,0,0.5), inset 0 -3px 0 rgba(0,0,0,0.2);
+  transition: transform 0.25s;
+}
+.reversi-disc.black { background: radial-gradient(circle at 35% 35%, #555, #111); border: 2px solid #333; }
+.reversi-disc.white { background: radial-gradient(circle at 35% 35%, #fff, #ccc); border: 2px solid #aaa; }
+.reversi-disc.sm    { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════════════
+   GAMES – GOMOKU
+   ═══════════════════════════════════════════════════════════════ */
+.gomoku-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+
+.gomoku-legend {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--dim);
+  padding: 8px 14px; background: var(--surface2); border-radius: 8px;
+}
+
+.gomoku-board {
+  display: grid;
+  background: #c8a96e; /* wood color */
+  padding: 20px; border-radius: 6px;
+  gap: 0;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.gomoku-cell {
+  width: 34px; height: 34px; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.gomoku-cell:hover .gk-line { background: rgba(0,0,0,0.06); }
+
+.gk-line {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(#7a5c2a, #7a5c2a) center/1px 100% no-repeat,
+    linear-gradient(#7a5c2a, #7a5c2a) center/100% 1px no-repeat;
+}
+.gk-line.top    { background-position-y: 50%, 50%; background-size: 1px 50%, 100% 1px; }
+.gk-line.bottom { background-position-y: 0, 50%;   background-size: 1px 50%, 100% 1px; }
+.gk-line.left   { background-position-x: 50%, 50%; background-size: 1px 100%, 50% 1px; }
+.gk-line.right  { background-position-x: 0,  50%;  background-size: 1px 100%, 50% 1px; }
+.gk-line.top.left    { background-size: 1px 50%, 50% 1px; background-position: 50% 50%, 50% 50%; }
+.gk-line.top.right   { background-size: 1px 50%, 50% 1px; background-position: 50% 50%, 0 50%; }
+.gk-line.bottom.left { background-size: 1px 50%, 50% 1px; background-position: 50% 0,  50% 50%; }
+.gk-line.bottom.right{ background-size: 1px 50%, 50% 1px; background-position: 50% 0,  0 50%; }
+
+.gk-stone {
+  width: 28px; height: 28px; border-radius: 50%; position: relative; z-index: 1;
+  box-shadow: 1px 2px 4px rgba(0,0,0,0.5);
+  transition: transform 0.1s;
+}
+.gk-stone.black { background: radial-gradient(circle at 38% 38%, #666, #111); }
+.gk-stone.white { background: radial-gradient(circle at 38% 38%, #fff, #ddd); }
+.gk-stone.last  { box-shadow: 0 0 0 3px var(--accent), 1px 2px 4px rgba(0,0,0,0.5); }
+.gk-stone.win   { box-shadow: 0 0 0 3px var(--green), 0 0 12px var(--green); }
+.gomoku-cell:hover .gk-stone { transform: scale(1.05); }
+
+/* ═══════════════════════════════════════════════════════════════
    TOASTS
    ═══════════════════════════════════════════════════════════════ */
 .toast-container {

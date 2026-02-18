@@ -56,5 +56,7 @@ const TicTacToeGame = (() => {
     // Nothing extra needed here unless we store win pattern in state
   }
 
+  GameRegistry.register({ id: 'tictactoe', label: 'Tic-Tac-Toe', icon: '✕○', render, update });
+
   return { render, update };
 })();

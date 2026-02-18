@@ -12,6 +12,11 @@ const SocketClient = (() => {
       socket.emit('setUsername', { username, avatar });
     });
 
+    // Server sends available game types immediately on connect
+    socket.on('gameTypes', gameList => {
+      Lobby.onGameTypes(gameList);
+    });
+
     socket.on('usernameSet', ({ success }) => {
       if (success) {
         App.showScreen('lobby');

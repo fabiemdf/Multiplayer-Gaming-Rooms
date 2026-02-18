@@ -169,5 +169,7 @@ const CheckersGame = (() => {
     }
   }
 
+  GameRegistry.register({ id: 'checkers', label: 'Checkers', icon: '⛀', render, update });
+
   return { render, update };
 })();

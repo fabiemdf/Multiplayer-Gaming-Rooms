@@ -46,10 +46,7 @@
     <div class="header-filters">
       <select id="filter-game">
         <option value="">All Games</option>
-        <option value="tictactoe">Tic-Tac-Toe</option>
-        <option value="connect4">Connect 4</option>
-        <option value="chess">Chess</option>
-        <option value="checkers">Checkers</option>
+        <!-- Populated dynamically from server game registry -->
       </select>
       <select id="filter-level">
         <option value="">All Levels</option>
@@ -93,10 +90,7 @@
           <div class="form-group">
             <label>Game Type</label>
             <select id="new-game-type">
-              <option value="tictactoe">Tic-Tac-Toe</option>
-              <option value="connect4">Connect 4</option>
-              <option value="chess" selected>Chess</option>
-              <option value="checkers">Checkers</option>
+              <!-- Populated dynamically from server game registry -->
             </select>
           </div>
           <div class="form-group">
@@ -238,10 +232,16 @@
 <script src="/js/lobby.js"></script>
 <script src="/js/chat.js"></script>
 <script src="/js/video.js"></script>
+<!-- registry.js must load before any game module -->
+<script src="/js/games/registry.js"></script>
+<!-- Each game self-registers; add new games here ↓ -->
 <script src="/js/games/tictactoe.js"></script>
 <script src="/js/games/connect4.js"></script>
 <script src="/js/games/chess.js"></script>
 <script src="/js/games/checkers.js"></script>
+<script src="/js/games/reversi.js"></script>
+<script src="/js/games/gomoku.js"></script>
+<!-- room.js must load after all games are registered -->
 <script src="/js/room.js"></script>
 </body>
 </html>

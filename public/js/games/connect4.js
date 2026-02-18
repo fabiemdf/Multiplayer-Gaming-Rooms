@@ -83,5 +83,7 @@ const Connect4Game = (() => {
     winCells = cells || [];
   }
 
+  GameRegistry.register({ id: 'connect4', label: 'Connect 4', icon: '🔴', render, update });
+
   return { render, update, setWinCells };
 })();
