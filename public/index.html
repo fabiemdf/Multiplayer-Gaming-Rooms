@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gaming Rooms – Multiplayer Hub</title>
+  <link rel="stylesheet" href="/css/main.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ══════════════ SETUP SCREEN ══════════════ -->
+<div id="setup-screen" class="screen active">
+  <div class="stars"></div>
+  <div class="setup-card">
+    <div class="logo">
+      <span class="logo-icon">🎮</span>
+      <h1 class="logo-text">Gaming Rooms</h1>
+      <p class="logo-sub">Multiplayer Hub</p>
+    </div>
+    <div class="setup-form">
+      <div class="form-group">
+        <label>Choose your username</label>
+        <input id="username-input" type="text" maxlength="20" placeholder="Enter username…" autocomplete="off" />
+      </div>
+      <div class="form-group">
+        <label>Pick your avatar</label>
+        <div class="avatar-grid" id="avatar-grid"></div>
+      </div>
+      <button id="enter-lobby-btn" class="btn btn-primary btn-lg">Enter Lobby</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ LOBBY SCREEN ══════════════ -->
+<div id="lobby-screen" class="screen">
+  <header class="lobby-header">
+    <div class="header-brand">
+      <span>🎮</span>
+      <span class="header-title">Gaming Rooms</span>
+    </div>
+    <div class="header-search">
+      <input id="search-input" type="text" placeholder="Search rooms…" />
+    </div>
+    <div class="header-filters">
+      <select id="filter-game">
+        <option value="">All Games</option>
+        <!-- Populated dynamically from server game registry -->
+      </select>
+      <select id="filter-level">
+        <option value="">All Levels</option>
+        <option value="beginner">Beginner</option>
+        <option value="intermediate">Intermediate</option>
+        <option value="advanced">Advanced</option>
+      </select>
+    </div>
+    <div class="header-user">
+      <span id="lobby-avatar" class="avatar-chip"></span>
+      <span id="lobby-username" class="username-chip"></span>
+    </div>
+    <button id="create-room-btn" class="btn btn-primary">+ Create Room</button>
+  </header>
+
+  <main class="lobby-main">
+    <div class="lobby-stats">
+      <div class="stat-card"><span id="stat-rooms">0</span><small>Rooms</small></div>
+      <div class="stat-card"><span id="stat-players">0</span><small>Players</small></div>
+    </div>
+    <div class="rooms-grid" id="rooms-grid">
+      <div class="empty-state">
+        <p>🎲 No rooms yet — be the first to create one!</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Create Room Modal -->
+  <div id="create-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Create Room</h2>
+        <button class="modal-close" id="close-create-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Room Name</label>
+          <input id="new-room-name" type="text" maxlength="40" placeholder="e.g. Friday Night Chess…" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Game Type</label>
+            <select id="new-game-type">
+              <!-- Populated dynamically from server game registry -->
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Skill Level</label>
+            <select id="new-level">
+              <option value="beginner">Beginner</option>
+              <option value="intermediate" selected>Intermediate</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group checkbox-group">
+          <label><input id="new-private" type="checkbox" /> Private Room</label>
+        </div>
+        <div class="form-group" id="password-group" style="display:none">
+          <label>Password</label>
+          <input id="new-password" type="password" placeholder="Room password…" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="confirm-create-btn" class="btn btn-primary">Create Room</button>
+        <button id="cancel-create-btn" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Private Modal -->
+  <div id="join-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Join Private Room</h2>
+        <button class="modal-close" id="close-join-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Password</label>
+          <input id="join-password" type="password" placeholder="Enter room password…" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="confirm-join-btn" class="btn btn-primary">Join</button>
+        <button id="cancel-join-btn" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ ROOM SCREEN ══════════════ -->
+<div id="room-screen" class="screen">
+  <header class="room-header">
+    <div class="room-header-left">
+      <button id="leave-room-btn" class="btn btn-ghost btn-sm">← Leave</button>
+      <div class="room-info">
+        <span id="room-name-display" class="room-name"></span>
+        <span id="room-meta" class="room-meta"></span>
+      </div>
+    </div>
+    <div class="room-header-right">
+      <div id="turn-indicator" class="turn-indicator hidden"></div>
+      <button id="toggle-video-btn" class="btn btn-icon" title="Toggle Video">📹</button>
+    </div>
+  </header>
+
+  <div class="room-layout">
+    <!-- Game Area -->
+    <div class="game-area">
+      <div id="game-status-bar" class="game-status-bar">
+        <span id="game-status-text">Waiting for players…</span>
+      </div>
+      <div id="game-container" class="game-container"></div>
+      <div class="game-controls">
+        <button id="ready-btn" class="btn btn-success">Ready</button>
+        <button id="resign-btn" class="btn btn-danger hidden">Resign</button>
+        <button id="rematch-btn" class="btn btn-primary hidden">Rematch</button>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="room-sidebar">
+      <!-- Players Panel -->
+      <div class="players-panel">
+        <h3 class="panel-title">Players</h3>
+        <div id="players-list" class="players-list"></div>
+        <div id="spectators-list" class="spectators-list hidden">
+          <small class="dim">Spectators</small>
+          <div id="spectators-inner"></div>
+        </div>
+      </div>
+
+      <!-- Chat Panel -->
+      <div class="chat-panel">
+        <h3 class="panel-title">Chat</h3>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-area">
+          <button id="emoji-btn" class="btn btn-icon" title="Emoji">😊</button>
+          <input id="chat-input" type="text" maxlength="500" placeholder="Say something…" />
+          <button id="send-btn" class="btn btn-primary btn-sm">Send</button>
+        </div>
+        <div id="emoji-picker" class="emoji-picker hidden"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Video Panel -->
+  <div id="video-panel" class="video-panel hidden">
+    <div class="video-panel-header">
+      <span>Video Call</span>
+      <button id="close-video-btn" class="btn btn-ghost btn-sm">✕</button>
+    </div>
+    <div id="video-grid" class="video-grid">
+      <div class="video-tile" id="local-video-tile">
+        <video id="local-video" autoplay muted playsinline></video>
+        <span class="video-label">You</span>
+      </div>
+    </div>
+    <div class="video-controls">
+      <button id="toggle-mic-btn" class="btn btn-icon" title="Mute">🎤</button>
+      <button id="toggle-cam-btn" class="btn btn-icon" title="Camera">📷</button>
+    </div>
+  </div>
+
+  <!-- Promotion Modal (chess) -->
+  <div id="promotion-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header"><h2>Promote Pawn</h2></div>
+      <div class="modal-body">
+        <div class="promo-options" id="promo-options"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container" class="toast-container"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/socket-client.js"></script>
+<script src="/js/lobby.js"></script>
+<script src="/js/chat.js"></script>
+<script src="/js/video.js"></script>
+<!-- registry.js must load before any game module -->
+<script src="/js/games/registry.js"></script>
+<!-- Each game self-registers; add new games here ↓ -->
+<script src="/js/games/tictactoe.js"></script>
+<script src="/js/games/connect4.js"></script>
+<script src="/js/games/chess.js"></script>
+<script src="/js/games/checkers.js"></script>
+<script src="/js/games/reversi.js"></script>
+<script src="/js/games/gomoku.js"></script>
+<!-- room.js must load after all games are registered -->
+<script src="/js/room.js"></script>
+</body>
+</html>
