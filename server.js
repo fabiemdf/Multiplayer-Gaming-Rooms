@@ -13,6 +13,8 @@ const rateLimit  = require('express-rate-limit');
 const bcrypt     = require('bcryptjs');
 const morgan     = require('morgan');
 const winston    = require('winston');
+const { createAdapter } = require('@socket.io/redis-adapter');
+const Redis      = require('ioredis');
 
 // ─── Logger ───────────────────────────────────────────────────────────────────
 const isProd = process.env.NODE_ENV === 'production';
@@ -126,6 +128,35 @@ const io = new Server(httpServer, {
     credentials: true,
   }
 });
+
+// ─── Redis adapter (optional — enables horizontal scaling) ────────────────────
+// Set REDIS_URL to activate (e.g. redis://localhost:6379).
+// The adapter syncs io.to(room).emit() across all server processes/instances.
+// NOTE: rooms & users are still in-memory per process. For multi-instance
+// deployments pair this with nginx ip_hash sticky sessions so each client
+// always hits the same process; the adapter then ensures cross-process
+// Socket.IO broadcasts (roomsList, rematch, etc.) reach every connected client.
+let redisClients = null;
+
+if (process.env.REDIS_URL) {
+  const safeUrl = process.env.REDIS_URL.replace(/:([^@]+)@/, ':***@');
+  try {
+    const pubClient = new Redis(process.env.REDIS_URL, { lazyConnect: false, enableReadyCheck: true });
+    const subClient = pubClient.duplicate();
+
+    pubClient.on('ready', () => {
+      io.adapter(createAdapter(pubClient, subClient));
+      redisClients = { pub: pubClient, sub: subClient };
+      logger.info('Socket.IO Redis adapter ready', { url: safeUrl });
+    });
+    pubClient.on('error', err => logger.error('Redis pub client error', { err: err.message }));
+    subClient.on('error', err => logger.error('Redis sub client error', { err: err.message }));
+  } catch (err) {
+    logger.error('Failed to initialise Redis adapter — running without it', { err: err.message });
+  }
+} else {
+  logger.info('REDIS_URL not set — running single-process (no Redis adapter)');
+}
 
 // ─── Socket rate limiter ───────────────────────────────────────────────────────
 const SOCKET_RATE = { windowMs: 15_000, maxEvents: 60 };
@@ -453,8 +484,15 @@ function startGame(room) {
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 function shutdown(signal) {
   logger.info(`${signal} received — shutting down gracefully`);
-  httpServer.close(() => {
+  httpServer.close(async () => {
     logger.info('HTTP server closed');
+    if (redisClients) {
+      await Promise.allSettled([
+        redisClients.pub.quit(),
+        redisClients.sub.quit(),
+      ]);
+      logger.info('Redis connections closed');
+    }
     process.exit(0);
   });
   setTimeout(() => process.exit(1), 10_000).unref();
