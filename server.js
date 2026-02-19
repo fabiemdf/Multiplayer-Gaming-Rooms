@@ -90,6 +90,32 @@ app.get('/health', (_, res) => {
   });
 });
 
+// ─── ICE server config endpoint ───────────────────────────────────────────────
+// Clients fetch this once so TURN credentials never appear in static JS.
+// Env vars:
+//   STUN_URLS       – comma-separated stun: URLs (optional, has defaults)
+//   TURN_URLS       – comma-separated turn: URLs (optional)
+//   TURN_USERNAME   – TURN username              (required when TURN_URLS set)
+//   TURN_CREDENTIAL – TURN password/credential   (required when TURN_URLS set)
+app.get('/api/ice-servers', (_, res) => {
+  const stunUrls = process.env.STUN_URLS
+    ? process.env.STUN_URLS.split(',').map(s => s.trim())
+    : ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
+
+  const iceServers = stunUrls.map(urls => ({ urls }));
+
+  if (process.env.TURN_URLS) {
+    const turnUrls = process.env.TURN_URLS.split(',').map(s => s.trim());
+    iceServers.push({
+      urls:       turnUrls,
+      username:   process.env.TURN_USERNAME   || '',
+      credential: process.env.TURN_CREDENTIAL || '',
+    });
+  }
+
+  res.json({ iceServers });
+});
+
 app.get('*', (_, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // ─── Socket.IO ────────────────────────────────────────────────────────────────

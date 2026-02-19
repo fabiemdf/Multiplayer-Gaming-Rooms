@@ -3,12 +3,25 @@
    ════════════════════════════════════════════════════════════════ */
 
 const VideoManager = (() => {
-  const ICE_SERVERS = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
-    ]
-  };
+  // Fetched once from /api/ice-servers so TURN credentials stay server-side
+  let iceConfig = null;
+
+  async function getIceConfig() {
+    if (iceConfig) return iceConfig;
+    try {
+      const res = await fetch('/api/ice-servers');
+      iceConfig = await res.json();
+    } catch (_) {
+      // Fallback to public STUN only
+      iceConfig = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ]
+      };
+    }
+    return iceConfig;
+  }
 
   let localStream = null;
   let peers = {};         // peerId -> RTCPeerConnection
@@ -87,7 +100,7 @@ const VideoManager = (() => {
   async function onPeerJoined(peerId, username) {
     if (!videoActive) return;
     peerNames[peerId] = username;
-    const pc = createPeerConnection(peerId);
+    const pc = await createPeerConnection(peerId);
     peers[peerId] = pc;
 
     // Offer
@@ -108,7 +121,7 @@ const VideoManager = (() => {
 
   async function handleOffer(fromId, offer) {
     if (!videoActive) return;
-    const pc = createPeerConnection(fromId);
+    const pc = await createPeerConnection(fromId);
     peers[fromId] = pc;
 
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -131,8 +144,9 @@ const VideoManager = (() => {
     } catch (e) { /* ignore */ }
   }
 
-  function createPeerConnection(peerId) {
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+  async function createPeerConnection(peerId) {
+    const config = await getIceConfig();
+    const pc = new RTCPeerConnection(config);
 
     // Add local tracks
     if (localStream) {
